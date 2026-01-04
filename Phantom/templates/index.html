@@ -1,0 +1,1017 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Phantom | Secure Chat</title>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&display=swap" rel="stylesheet">
+
+    <style>
+        :root {
+            /* Premium Palette */
+            --primary: #00a884;
+            --primary-dark: #008f6f;
+            --primary-gradient: linear-gradient(135deg, #00a884 0%, #005c4b 100%);
+            --bg-app: #e0e0e0;
+            /* Fallback */
+            --bg-chat: #efeae2;
+            --bubble-in: #ffffff;
+            --bubble-out: #d9fdd3;
+            --text-main: #111b21;
+            --text-secondary: #667781;
+            --accent-glow: rgba(0, 168, 132, 0.4);
+        }
+
+        body {
+            margin: 0;
+            font-family: 'Inter', sans-serif;
+            background: #d1d7db;
+            height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            overflow: hidden;
+        }
+
+        /* --- App Shell --- */
+        .app-container {
+            width: 100%;
+            height: 100%;
+            background-color: var(--bg-chat);
+            position: relative;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            box-shadow: 0 20px 50px rgba(0, 0, 0, 0.2);
+        }
+
+        /* Hide container background when login is active */
+        .app-container:has(#login-view.active) {
+            background: transparent;
+            box-shadow: none;
+            border: none;
+        }
+
+        @media (min-width: 769px) {
+            body {
+                background: linear-gradient(135deg, #0f2027, #203a43, #2c5364);
+            }
+
+            .app-container {
+                max-width: 450px;
+                height: 92vh;
+                border-radius: 20px;
+                border: 1px solid rgba(255, 255, 255, 0.2);
+            }
+
+            /* Hide container when login is active */
+            .app-container:has(#login-view.active) {
+                max-width: none;
+                height: 100vh;
+                border-radius: 0;
+                border: none;
+            }
+
+            /* Login view breaks out and takes full centered width */
+            #login-view.active {
+                position: fixed;
+                top: 50%;
+                left: 50%;
+                transform: translate(-50%, -50%);
+                width: 90%;
+                max-width: 1100px;
+                height: 90vh;
+                border-radius: 20px;
+                overflow: hidden;
+                box-shadow: 0 30px 60px rgba(0, 0, 0, 0.3);
+                z-index: 1000;
+            }
+        }
+
+        /* --- ANIMATED DOODLE BACKGROUND --- */
+        .doodle-layer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 0;
+            overflow: hidden;
+            background-color: var(--bg-chat);
+            pointer-events: none;
+        }
+
+        /* The floating icons */
+        .floating-icon {
+            position: absolute;
+            color: rgba(0, 92, 75, 0.08);
+            /* Subtle but visible dark teal */
+            font-size: 24px;
+            bottom: -50px;
+            /* Start below screen */
+            animation: floatUp linear infinite;
+        }
+
+        @keyframes floatUp {
+            0% {
+                transform: translateY(0) rotate(0deg) scale(0.8);
+                opacity: 0;
+            }
+
+            10% {
+                opacity: 1;
+            }
+
+            90% {
+                opacity: 1;
+            }
+
+            100% {
+                transform: translateY(-110vh) rotate(360deg) scale(1.1);
+                opacity: 0;
+            }
+        }
+
+        /* --- Screens --- */
+        #login-view,
+        #chat-view {
+            display: none;
+            flex-direction: column;
+            height: 100%;
+            width: 100%;
+            z-index: 5;
+            /* Above background */
+        }
+
+        #login-view.active,
+        #chat-view.active {
+            display: flex;
+        }
+
+        /* --- LOGIN SCREEN DESIGN --- */
+        #login-view {
+            background: #ffffff;
+            flex-direction: row;
+            padding: 0;
+        }
+
+        /* Left Hero Section */
+        .login-hero {
+            flex: 1;
+            background: linear-gradient(135deg, #00a884 0%, #005c4b 100%);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 60px 40px;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .login-hero::before {
+            content: '';
+            position: absolute;
+            width: 400px;
+            height: 400px;
+            background: radial-gradient(circle, rgba(255, 255, 255, 0.1) 0%, transparent 70%);
+            border-radius: 50%;
+            top: -100px;
+            left: -100px;
+            animation: float 6s ease-in-out infinite;
+        }
+
+        .login-hero::after {
+            content: '';
+            position: absolute;
+            width: 300px;
+            height: 300px;
+            background: radial-gradient(circle, rgba(255, 255, 255, 0.08) 0%, transparent 70%);
+            border-radius: 50%;
+            bottom: -80px;
+            right: -80px;
+            animation: float 8s ease-in-out infinite reverse;
+        }
+
+        @keyframes float {
+
+            0%,
+            100% {
+                transform: translate(0, 0) scale(1);
+            }
+
+            50% {
+                transform: translate(20px, 20px) scale(1.1);
+            }
+        }
+
+        .hero-content {
+            position: relative;
+            z-index: 2;
+            text-align: center;
+            color: white;
+            width: 100%;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .brand-hero {
+            position: relative;
+            width: 140px;
+            height: 140px;
+            margin-bottom: 40px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .pulse-ring {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            border-radius: 50%;
+            border: 3px solid rgba(255, 255, 255, 0.4);
+            animation: pulse-ring 2s infinite ease-out;
+            opacity: 0;
+        }
+
+        .pulse-ring:nth-child(2) {
+            animation-delay: 0.5s;
+        }
+
+        @keyframes pulse-ring {
+            0% {
+                transform: scale(0.8);
+                opacity: 0.8;
+            }
+
+            100% {
+                transform: scale(1.6);
+                opacity: 0;
+            }
+        }
+
+        .logo-circle {
+            width: 120px;
+            height: 120px;
+            background: rgba(255, 255, 255, 0.2);
+            backdrop-filter: blur(10px);
+            border: 3px solid rgba(255, 255, 255, 0.3);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 15px 35px rgba(0, 0, 0, 0.2);
+            z-index: 2;
+            animation: levitate 3s ease-in-out infinite;
+        }
+
+        .logo-circle i {
+            font-size: 60px;
+            color: white;
+            filter: drop-shadow(0 3px 8px rgba(0, 0, 0, 0.3));
+        }
+
+        @keyframes levitate {
+
+            0%,
+            100% {
+                transform: translateY(0);
+            }
+
+            50% {
+                transform: translateY(-15px);
+            }
+        }
+
+        .hero-content h1 {
+            margin: 0 0 15px 0;
+            font-size: 42px;
+            color: white;
+            font-weight: 700;
+            letter-spacing: -1px;
+        }
+
+        .hero-content p {
+            margin: 0;
+            color: rgba(255, 255, 255, 0.9);
+            font-size: 18px;
+            font-weight: 400;
+        }
+
+        .hero-features {
+            margin-top: 50px;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+            align-items: flex-start;
+        }
+
+        .feature-item {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            color: white;
+        }
+
+        .feature-icon {
+            width: 45px;
+            height: 45px;
+            background: rgba(255, 255, 255, 0.15);
+            backdrop-filter: blur(10px);
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 20px;
+        }
+
+        .feature-text {
+            text-align: left;
+        }
+
+        .feature-text h3 {
+            margin: 0 0 5px 0;
+            font-size: 16px;
+            font-weight: 600;
+        }
+
+        .feature-text p {
+            margin: 0;
+            font-size: 13px;
+            opacity: 0.85;
+        }
+
+        /* Right Form Section */
+        .login-form-section {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 60px 50px;
+            background: #fafafa;
+        }
+
+        .form-container {
+            width: 100%;
+            max-width: 400px;
+        }
+
+        .form-header {
+            margin-bottom: 40px;
+            text-align: center;
+        }
+
+        .form-header h2 {
+            margin: 0 0 10px 0;
+            font-size: 28px;
+            color: #111b21;
+            font-weight: 700;
+        }
+
+        .form-header p {
+            margin: 0;
+            color: var(--text-secondary);
+            font-size: 15px;
+        }
+
+        .form-card {
+            width: 100%;
+            display: flex;
+            flex-direction: column;
+            gap: 18px;
+        }
+
+        .btn-primary {
+            background: var(--primary-gradient);
+            color: white;
+            border: none;
+            padding: 16px;
+            border-radius: 12px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+            box-shadow: 0 5px 15px rgba(0, 168, 132, 0.3);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+        }
+
+        .btn-primary:active {
+            transform: scale(0.98);
+        }
+
+        .btn-outline {
+            background: transparent;
+            color: var(--primary-dark);
+            border: 2px solid var(--primary);
+            padding: 14px;
+            border-radius: 12px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+        }
+
+        .input-field {
+            padding: 15px;
+            border: 1px solid #ddd;
+            border-radius: 12px;
+            font-size: 16px;
+            text-align: center;
+            outline: none;
+            transition: 0.3s;
+            background: #f9f9f9;
+        }
+
+        .input-field:focus {
+            border-color: var(--primary);
+            background: #fff;
+            box-shadow: 0 0 0 3px rgba(0, 168, 132, 0.1);
+        }
+
+        /* --- CHAT VIEW DESIGN --- */
+        .chat-header {
+            background: rgba(255, 255, 255, 0.9);
+            backdrop-filter: blur(10px);
+            padding: 10px 15px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.02);
+            z-index: 10;
+        }
+
+        .avatar-group {
+            position: relative;
+        }
+
+        .header-avatar {
+            width: 45px;
+            height: 45px;
+            background: var(--primary-gradient);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-size: 20px;
+        }
+
+        .online-dot {
+            position: absolute;
+            bottom: 2px;
+            right: 2px;
+            width: 12px;
+            height: 12px;
+            background: #25d366;
+            /* Online Green */
+            border: 2px solid white;
+            border-radius: 50%;
+            animation: pulse-green 2s infinite;
+        }
+
+        .header-info h2 {
+            margin: 0;
+            font-size: 16px;
+            color: var(--text-main);
+        }
+
+        .header-info span {
+            font-size: 12px;
+            color: var(--primary);
+            font-weight: 500;
+        }
+
+        .timer-chip {
+            margin-left: auto;
+            background: #ffebee;
+            color: #d32f2f;
+            padding: 5px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: bold;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+
+        /* Messages */
+        .chat-area {
+            flex: 1;
+            overflow-y: auto;
+            padding: 15px;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .sys-msg {
+            align-self: center;
+            background: #fff8c5;
+            color: #555;
+            font-size: 12px;
+            padding: 8px 16px;
+            border-radius: 8px;
+            box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+            text-align: center;
+            margin: 10px 0;
+            border: 1px solid #f1e09a;
+        }
+
+        .message {
+            max-width: 80%;
+            padding: 8px 12px;
+            border-radius: 12px;
+            font-size: 15px;
+            line-height: 1.4;
+            position: relative;
+            box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+            animation: popIn 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            word-wrap: break-word;
+        }
+
+        @keyframes popIn {
+            from {
+                opacity: 0;
+                transform: scale(0.9) translateY(10px);
+            }
+
+            to {
+                opacity: 1;
+                transform: scale(1) translateY(0);
+            }
+        }
+
+        .msg-in {
+            align-self: flex-start;
+            background: var(--bubble-in);
+            border-top-left-radius: 0;
+        }
+
+        .msg-out {
+            align-self: flex-end;
+            background: var(--bubble-out);
+            border-top-right-radius: 0;
+        }
+
+        .meta {
+            display: flex;
+            justify-content: flex-end;
+            align-items: center;
+            gap: 4px;
+            font-size: 10px;
+            color: rgba(0, 0, 0, 0.45);
+            margin-top: 2px;
+        }
+
+        /* Footer */
+        .chat-footer {
+            background: #f0f2f5;
+            padding: 10px 15px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            z-index: 10;
+        }
+
+        .footer-input {
+            flex: 1;
+            padding: 12px 15px;
+            border-radius: 20px;
+            border: none;
+            background: white;
+            font-size: 15px;
+            outline: none;
+        }
+
+        .btn-send {
+            width: 45px;
+            height: 45px;
+            border-radius: 50%;
+            background: var(--primary-dark);
+            color: white;
+            border: none;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 18px;
+            cursor: pointer;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+            transition: transform 0.2s;
+        }
+
+        .btn-send:hover {
+            transform: scale(1.1);
+        }
+
+        .btn-send:active {
+            transform: scale(0.9);
+        }
+
+        /* Ping Bar */
+        .ping-bar {
+            background: rgba(255, 255, 255, 0.6);
+            backdrop-filter: blur(5px);
+            font-size: 10px;
+            padding: 4px 15px;
+            display: flex;
+            justify-content: space-between;
+            color: #555;
+            border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+        }
+
+        /* Responsive Design for Mobile */
+        @media (max-width: 768px) {
+            #login-view {
+                flex-direction: column;
+            }
+
+            .login-hero {
+                padding: 40px 30px;
+                min-height: 50vh;
+            }
+
+            .brand-hero {
+                width: 100px;
+                height: 100px;
+                margin-bottom: 25px;
+            }
+
+            .logo-circle {
+                width: 90px;
+                height: 90px;
+            }
+
+            .logo-circle i {
+                font-size: 45px;
+            }
+
+            .hero-content h1 {
+                font-size: 32px;
+            }
+
+            .hero-content p {
+                font-size: 16px;
+            }
+
+            .hero-features {
+                margin-top: 30px;
+                gap: 15px;
+            }
+
+            .feature-item {
+                gap: 12px;
+            }
+
+            .feature-icon {
+                width: 40px;
+                height: 40px;
+                font-size: 18px;
+            }
+
+            .feature-text h3 {
+                font-size: 14px;
+            }
+
+            .feature-text p {
+                font-size: 12px;
+            }
+
+            .login-form-section {
+                padding: 40px 30px;
+            }
+
+            .form-header h2 {
+                font-size: 24px;
+            }
+
+            .form-header p {
+                font-size: 14px;
+            }
+        }
+    </style>
+</head>
+
+<body>
+
+    <div class="app-container">
+
+        <div class="doodle-layer" id="doodle-bg">
+        </div>
+
+        <div id="login-view" class="active">
+            <!-- Left Hero Section -->
+            <div class="login-hero">
+                <div class="hero-content">
+                    <div class="brand-hero">
+                        <div class="pulse-ring"></div>
+                        <div class="pulse-ring"></div>
+                        <div class="logo-circle">
+                            <i class="fas fa-ghost"></i>
+                        </div>
+                    </div>
+
+                    <h1>Phantom</h1>
+                    <p>Secure. Ephemeral. Trace-less.</p>
+
+                    <div class="hero-features">
+                        <div class="feature-item">
+                            <div class="feature-icon">
+                                <i class="fas fa-lock"></i>
+                            </div>
+                            <div class="feature-text">
+                                <h3>End-to-End Encrypted</h3>
+                                <p>Your messages are completely private</p>
+                            </div>
+                        </div>
+                        <div class="feature-item">
+                            <div class="feature-icon">
+                                <i class="fas fa-clock"></i>
+                            </div>
+                            <div class="feature-text">
+                                <h3>Self-Destructing</h3>
+                                <p>Chats vanish after 10 minutes</p>
+                            </div>
+                        </div>
+                        <div class="feature-item">
+                            <div class="feature-icon">
+                                <i class="fas fa-shield-alt"></i>
+                            </div>
+                            <div class="feature-text">
+                                <h3>No Data Storage</h3>
+                                <p>Zero logs, zero database, zero trace</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Right Form Section -->
+            <div class="login-form-section">
+                <div class="form-container">
+                    <div class="form-header">
+                        <h2>Get Started</h2>
+                        <p>Create a new room or join an existing one</p>
+                    </div>
+
+                    <div class="form-card">
+                        <button class="btn-primary" onclick="createRoom()">
+                            <i class="fas fa-plus-circle"></i> Create New Room
+                        </button>
+
+                        <div style="text-align: center; color: #999; font-size: 14px; font-weight: 500;">— OR —</div>
+
+                        <input type="text" id="token-input" class="input-field" placeholder="Paste Token Code">
+                        <button class="btn-outline" onclick="joinRoom()">Join Room</button>
+                    </div>
+
+                    <p id="error-msg"
+                        style="color: #e53935; margin-top: 25px; font-size: 14px; text-align: center; min-height: 20px;">
+                    </p>
+                </div>
+            </div>
+        </div>
+
+        <div id="chat-view">
+            <div class="chat-header">
+                <div class="avatar-group">
+                    <div class="header-avatar"><i class="fas fa-ghost"></i></div>
+                    <div class="online-dot" id="status-dot" style="display:none;"></div>
+                </div>
+                <div class="header-info">
+                    <h2>Phantom User</h2>
+                    <span id="status-text">Connecting...</span>
+                </div>
+                <div class="timer-chip">
+                    <i class="fas fa-stopwatch"></i>
+                    <span id="timer-display">10:00</span>
+                </div>
+            </div>
+
+            <div class="ping-bar">
+                <span>ME: <span id="my-ping" style="font-weight:bold;">--</span></span>
+                <span>PEER: <span id="peer-ping" style="font-weight:bold;">--</span></span>
+            </div>
+
+            <div class="chat-area" id="chat-box">
+                <div class="sys-msg">
+                    <i class="fas fa-lock"></i> Messages are end-to-end encrypted. No database, no logs.
+                </div>
+            </div>
+
+            <div class="chat-footer">
+                <input type="text" id="msg-input" class="footer-input" placeholder="Type a message..."
+                    autocomplete="off">
+                <button class="btn-send" onclick="sendMessage()">
+                    <i class="fas fa-paper-plane"></i>
+                </button>
+            </div>
+        </div>
+
+    </div>
+
+    <script>
+        // --- ANIMATED BACKGROUND GENERATOR ---
+        function initDoodles() {
+            const container = document.getElementById('doodle-bg');
+            const icons = ['fa-ghost', 'fa-shield-alt', 'fa-lock', 'fa-key', 'fa-user-secret', 'fa-file-code', 'fa-fingerprint'];
+            // Create 50 floating icons
+            for (let i = 0; i < 50; i++) {
+                const icon = document.createElement('i');
+                const randomIcon = icons[Math.floor(Math.random() * icons.length)];
+                icon.className = `fas ${randomIcon} floating-icon`;
+
+                // Randomize appearance
+                const size = Math.random() * 20 + 15; // 15px to 35px
+                const left = Math.random() * 100; // 0% to 100% width
+                const duration = Math.random() * 15 + 10; // 10s to 25s float time
+                const delay = Math.random() * 20; // 0s to 20s start delay
+
+                icon.style.fontSize = `${size}px`;
+                icon.style.left = `${left}%`;
+                icon.style.animationDuration = `${duration}s`;
+                icon.style.animationDelay = `-${delay}s`; // Negative delay starts animation mid-way immediately
+
+                container.appendChild(icon);
+            }
+        }
+        initDoodles();
+
+        // --- CORE LOGIC (SocketIO) ---
+        const socket = io();
+        let currentToken = null;
+        let typingTimeout = null;
+        const mySocketId = Math.random().toString(36).substr(2, 9);
+
+        function uuidv4() {
+            return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {
+                var r = Math.random() * 16 | 0, v = c == 'x' ? r : (r & 0x3 | 0x8);
+                return v.toString(16);
+            });
+        }
+
+        async function createRoom() {
+            const btn = document.querySelector('.btn-primary');
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Creating...';
+
+            const res = await fetch('/generate_token', { method: 'POST' });
+            const data = await res.json();
+
+            if (navigator.share) {
+                navigator.share({ title: 'Join Phantom', text: data.token }).catch(console.error);
+            } else {
+                navigator.clipboard.writeText(data.token);
+                alert("Token Copied: " + data.token);
+            }
+            enterChat(data.token, data.expires_in);
+            btn.innerHTML = '<i class="fas fa-plus-circle"></i> Create New Room';
+        }
+
+        async function joinRoom() {
+            const token = document.getElementById('token-input').value.trim();
+            if (!token) return;
+
+            const res = await fetch('/validate_token', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ token })
+            });
+            const data = await res.json();
+            if (data.valid) enterChat(token, data.remaining);
+            else document.getElementById('error-msg').innerText = "Invalid or Expired Token";
+        }
+
+        function enterChat(token, timeLeft) {
+            currentToken = token;
+            document.getElementById('login-view').classList.remove('active');
+            document.getElementById('chat-view').classList.add('active');
+            socket.emit('join', { token });
+            startTimer(timeLeft);
+            startPing();
+        }
+
+        function sendMessage() {
+            const input = document.getElementById('msg-input');
+            const text = input.value.trim();
+            if (!text) return;
+
+            const msgId = uuidv4();
+            const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+            addMessageUI(text, 'out', time, msgId, 'tick');
+            socket.emit('message', {
+                token: currentToken, msg: text, sender_id: mySocketId,
+                sender_socket_id: socket.id, msg_id: msgId, timestamp: time
+            });
+            input.value = '';
+            socket.emit('stop_typing', { token: currentToken });
+        }
+
+        socket.on('message', (data) => {
+            if (data.sender_id === mySocketId) return;
+            addMessageUI(data.msg, 'in', data.timestamp);
+            socket.emit('confirm_delivery', { token: currentToken, msg_id: data.msg_id, sender_socket_id: data.sender_socket_id });
+        });
+
+        socket.on('msg_delivered', (data) => {
+            const el = document.getElementById(`tick-${data.msg_id}`);
+            if (el) {
+                el.className = 'fas fa-check-double';
+                el.style.color = '#53bdeb'; // Blue tick
+            }
+        });
+
+        function addMessageUI(text, type, time, msgId = null, tickClass = '') {
+            const box = document.getElementById('chat-box');
+            const div = document.createElement('div');
+            div.className = `message msg-${type}`;
+
+            let tickHtml = '';
+            if (type === 'out') tickHtml = `<i id="tick-${msgId}" class="fas fa-check" style="margin-left:5px;"></i>`;
+
+            div.innerHTML = `${text} <div class="meta">${time} ${tickHtml}</div>`;
+            box.appendChild(div);
+            box.scrollTop = box.scrollHeight;
+        }
+
+        // Typing & Status
+        const input = document.getElementById('msg-input');
+        input.addEventListener('input', () => {
+            socket.emit('typing', { token: currentToken });
+            clearTimeout(typingTimeout);
+            typingTimeout = setTimeout(() => socket.emit('stop_typing', { token: currentToken }), 1000);
+        });
+        input.addEventListener("keypress", (e) => { if (e.key === "Enter") sendMessage(); });
+
+        socket.on('display_typing', () => {
+            document.getElementById('status-text').innerText = "Typing...";
+            document.getElementById('status-text').style.color = "#25d366";
+        });
+
+        socket.on('hide_typing', () => updateStatus(lastCount));
+
+        let lastCount = 0;
+        socket.on('update_status', (data) => {
+            lastCount = data.count;
+            updateStatus(data.count);
+        });
+
+        function updateStatus(count) {
+            const txt = document.getElementById('status-text');
+            const dot = document.getElementById('status-dot');
+            txt.style.color = "var(--primary)";
+
+            if (count > 1) {
+                txt.innerText = "Online";
+                dot.style.display = "block";
+            } else {
+                txt.innerText = "Waiting for peer...";
+                dot.style.display = "none";
+            }
+        }
+
+        // Timer
+        function startTimer(seconds) {
+            const timerEl = document.getElementById('timer-display');
+            setInterval(() => {
+                seconds--;
+                if (seconds <= 0) location.reload();
+                const m = Math.floor(seconds / 60);
+                const s = Math.floor(seconds % 60);
+                timerEl.innerText = `${m}:${s < 10 ? '0' + s : s}`;
+                if (seconds < 60) timerEl.parentElement.style.background = "#ffebee";
+            }, 1000);
+        }
+
+        // Ping
+        function startPing() {
+            setInterval(() => {
+                const start = Date.now();
+                socket.emit('ping_check', () => {
+                    const lat = Date.now() - start;
+                    const myPing = document.getElementById('my-ping');
+                    myPing.innerText = lat + "ms";
+                    myPing.style.color = lat < 100 ? '#25d366' : 'red';
+                    socket.emit('share_metrics', { token: currentToken, ping: lat });
+                });
+            }, 2000);
+        }
+
+        socket.on('update_peer_metrics', (data) => {
+            const pPing = document.getElementById('peer-ping');
+            pPing.innerText = data.ping + "ms";
+            pPing.style.color = data.ping < 100 ? '#25d366' : 'red';
+        });
+
+    </script>
+</body>
+
+</html>
